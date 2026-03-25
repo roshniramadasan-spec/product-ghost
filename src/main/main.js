@@ -8,6 +8,10 @@ const { getSetting } = require("./database");
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 try { if (require("electron-squirrel-startup")) app.quit(); } catch {}
 
+// Windows: set AppUserModelId so native notifications display correctly
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.productghost.app");
+}
 
 let mainWindow = null;
 let tray = null;

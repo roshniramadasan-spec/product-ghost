@@ -1,6 +1,7 @@
 const { Notification } = require("electron");
 const { captureScreen, analyzeScreenContext } = require("./captureEngine");
 const { findMatches } = require("./matchingEngine");
+const { showNudgeOverlay } = require("./nudgeWindow");
 const {
   recordNudge,
   getNudgesShownToday,
@@ -25,8 +26,8 @@ function startEngine() {
 
   console.log(`[NudgeManager] Starting engine, interval: ${intervalMin}min`);
 
-  // Run once after a short delay, then on interval
-  setTimeout(() => runCycle(), 10000);
+  // Run first nudge after 8 seconds so user sees it quickly
+  setTimeout(() => runCycle(), 8000);
   captureInterval = setInterval(() => runCycle(), intervalMs);
 }
 
@@ -79,7 +80,7 @@ async function runCycle() {
       return;
     }
 
-    // 4. Deliver the top match as a nudge
+    // 4. Deliver the top match as a proactive nudge
     const topMatch = matches[0];
     deliverNudge(topMatch, screenContext);
   } catch (err) {
@@ -88,22 +89,40 @@ async function runCycle() {
 }
 
 function deliverNudge(entry, screenContext) {
-  const notification = new Notification({
-    title: `💡 ${entry.framework}`,
-    body: buildNudgeBody(entry, screenContext),
-    silent: true,
-    timeoutType: "default",
-  });
-
-  notification.on("click", () => {
-    // Open "Learn More" window via IPC
+  // ── Primary: always-on-top floating overlay popup ──
+  // This is the proactive nudge — appears over all windows, impossible to miss
+  showNudgeOverlay(entry, screenContext, (clickedEntry) => {
+    // User clicked "Learn More" on the overlay
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      mainWindowRef.webContents.send("show-learn-more", entry);
+      mainWindowRef.webContents.send("show-learn-more", clickedEntry);
       mainWindowRef.show();
+      mainWindowRef.focus();
     }
   });
 
-  notification.show();
+  // ── Secondary: native OS notification as backup ──
+  try {
+    if (Notification.isSupported()) {
+      const notification = new Notification({
+        title: `👻 ${entry.framework}`,
+        body: buildNudgeBody(entry, screenContext),
+        silent: false,
+        timeoutType: "default",
+      });
+
+      notification.on("click", () => {
+        if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+          mainWindowRef.webContents.send("show-learn-more", entry);
+          mainWindowRef.show();
+          mainWindowRef.focus();
+        }
+      });
+
+      notification.show();
+    }
+  } catch (err) {
+    console.log("[NudgeManager] Native notification failed:", err.message);
+  }
 
   // Record in history
   recordNudge(
@@ -128,11 +147,10 @@ function buildNudgeBody(entry, screenContext) {
   const appMention = screenContext.app
     ? `Looks like you're in ${screenContext.app}. `
     : "";
-  const guestMention = entry.guest ? `${entry.guest} suggests: ` : "";
+  const guestMention = entry.guest ? `${entry.guest}: ` : "";
 
-  // Keep it short for notification
-  const advice = entry.advice.length > 120
-    ? entry.advice.substring(0, 117) + "…"
+  const advice = entry.advice.length > 100
+    ? entry.advice.substring(0, 97) + "…"
     : entry.advice;
 
   return `${appMention}${guestMention}${advice}`;
