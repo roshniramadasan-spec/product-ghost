@@ -240,9 +240,11 @@ function parseWindowTitle(title) {
     { match: (t) => t.includes("analytics") || t.includes("dashboard"),
       app: "Analytics", work_type: "reviewing analytics", topics: ["analytics", "metrics", "dashboard", "kpi"] },
 
-    // Browser fallbacks by common title patterns
+    // Browsers: extract context from the PAGE TITLE (the text before "- Google Chrome" etc.)
+    // This is the key rule — Chrome shows "Page Title - Google Chrome" so we parse the page title
     { match: (t) => t.includes("chrome") || t.includes("firefox") || t.includes("edge") || t.includes("safari") || t.includes("brave"),
-      app: "Browser", work_type: "browsing", topics: ["research", "browsing"] },
+      app: "BROWSER_PARSE_TITLE",  // special marker — handled below
+      work_type: "browsing", topics: [] },
 
     // Terminal / CLI
     { match: (t) => t.includes("terminal") || t.includes("command prompt") || t.includes("powershell") || t.includes("cmd"),
@@ -255,6 +257,11 @@ function parseWindowTitle(title) {
 
   for (const rule of appRules) {
     if (rule.match(t)) {
+      // Special handling for browsers: parse the PAGE TITLE for content context
+      if (rule.app === "BROWSER_PARSE_TITLE") {
+        return parseBrowserTitle(title, t);
+      }
+
       return {
         app: rule.app,
         work_type: rule.work_type,
@@ -280,6 +287,80 @@ function parseWindowTitle(title) {
     work_type: "general work",
     topics: ["productivity"],
     description: `User is working in "${title}"`,
+  };
+}
+
+/**
+ * Parse a browser window title to extract the actual page content.
+ * Chrome titles look like: "Page Title - Google Chrome"
+ * Edge: "Page Title - Microsoft Edge"
+ * Firefox: "Page Title — Mozilla Firefox"
+ */
+function parseBrowserTitle(fullTitle, t) {
+  // Strip the browser name suffix to get the actual page title
+  const browserSuffixes = [
+    " - google chrome", " - mozilla firefox", " – mozilla firefox",
+    " - microsoft edge", " - brave", " - safari", " - opera",
+  ];
+
+  let pageTitle = t;
+  let browserName = "Browser";
+  for (const suffix of browserSuffixes) {
+    if (t.endsWith(suffix)) {
+      pageTitle = t.slice(0, -suffix.length);
+      browserName = suffix.replace(/^ - | – /g, "").trim();
+      browserName = browserName.charAt(0).toUpperCase() + browserName.slice(1);
+      break;
+    }
+  }
+
+  // Now extract meaningful keywords from the page title
+  const pageKeywords = extractContextKeywords(pageTitle);
+  const topics = [...pageKeywords];
+
+  // Determine what kind of content the user is reading
+  let work_type = "browsing the web";
+
+  if (pageTitle.includes("doc") || pageTitle.includes("spec") || pageTitle.includes("prd")) {
+    work_type = "reading a document";
+    topics.push("product spec", "prd", "planning");
+  } else if (pageTitle.includes("analytics") || pageTitle.includes("dashboard") || pageTitle.includes("metric")) {
+    work_type = "reviewing analytics";
+    topics.push("analytics", "metrics", "dashboard");
+  } else if (pageTitle.includes("slack") || pageTitle.includes("message") || pageTitle.includes("chat")) {
+    work_type = "messaging";
+    topics.push("communication", "team");
+  } else if (pageTitle.includes("mail") || pageTitle.includes("inbox")) {
+    work_type = "reading email";
+    topics.push("communication", "stakeholder");
+  } else if (pageTitle.includes("jira") || pageTitle.includes("linear") || pageTitle.includes("issue") || pageTitle.includes("ticket")) {
+    work_type = "managing tasks";
+    topics.push("tickets", "prioritization", "backlog");
+  } else if (pageTitle.includes("figma") || pageTitle.includes("design")) {
+    work_type = "reviewing designs";
+    topics.push("design", "prototype");
+  } else if (pageTitle.includes("youtube") || pageTitle.includes("video")) {
+    work_type = "watching a video";
+  } else if (pageTitle.includes("blog") || pageTitle.includes("article") || pageTitle.includes("post")) {
+    work_type = "reading an article";
+    topics.push("research");
+  } else if (pageTitle.includes("search") || pageTitle.includes("google")) {
+    work_type = "searching the web";
+    topics.push("research");
+  }
+
+  // Add general browsing context if no specific topics found
+  if (topics.length === 0) {
+    topics.push("research", "browsing");
+  }
+
+  const cleanPageTitle = fullTitle.split(" - ").slice(0, -1).join(" - ") || fullTitle;
+
+  return {
+    app: browserName,
+    work_type,
+    topics: [...new Set(topics)],
+    description: `User is ${work_type} in ${browserName}. Page: "${cleanPageTitle}"`,
   };
 }
 
