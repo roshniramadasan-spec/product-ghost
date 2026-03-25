@@ -44,7 +44,7 @@ function createMainWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.loadURL("http://localhost:5222");
   } else {
     mainWindow.loadFile(path.join(__dirname, "../../dist/index.html"));
   }
