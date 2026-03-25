@@ -24,6 +24,7 @@ function initDatabase() {
       quote TEXT NOT NULL,
       advice TEXT NOT NULL,
       context_triggers TEXT NOT NULL,
+      podcast_url TEXT DEFAULT NULL,
       embedding TEXT DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -62,8 +63,8 @@ function seedDatabase() {
   if (count.c > 0) return;
 
   const insert = db.prepare(`
-    INSERT INTO knowledge_base (id, guest, episode, framework, tags, quote, advice, context_triggers)
-    VALUES (@id, @guest, @episode, @framework, @tags, @quote, @advice, @context_triggers)
+    INSERT INTO knowledge_base (id, guest, episode, framework, tags, quote, advice, context_triggers, podcast_url)
+    VALUES (@id, @guest, @episode, @framework, @tags, @quote, @advice, @context_triggers, @podcast_url)
   `);
 
   const tx = db.transaction(() => {
@@ -72,6 +73,7 @@ function seedDatabase() {
         ...entry,
         tags: JSON.stringify(entry.tags),
         context_triggers: JSON.stringify(entry.context_triggers),
+        podcast_url: entry.podcast_url || null,
       });
     }
   });
@@ -162,10 +164,18 @@ function searchByTriggers(keywords) {
 /* ── Nudge History ────────────────────────────────────────────────── */
 
 function recordNudge(knowledgeId, contextDescription, similarityScore) {
+  // Store local time explicitly so renderer displays correct time
+  const now = new Date();
+  const localISO = now.getFullYear() + '-' +
+    String(now.getMonth() + 1).padStart(2, '0') + '-' +
+    String(now.getDate()).padStart(2, '0') + ' ' +
+    String(now.getHours()).padStart(2, '0') + ':' +
+    String(now.getMinutes()).padStart(2, '0') + ':' +
+    String(now.getSeconds()).padStart(2, '0');
   db.prepare(
-    `INSERT INTO nudge_history (knowledge_id, context_description, similarity_score)
-     VALUES (?, ?, ?)`
-  ).run(knowledgeId, contextDescription, similarityScore);
+    `INSERT INTO nudge_history (knowledge_id, context_description, similarity_score, shown_at)
+     VALUES (?, ?, ?, ?)`
+  ).run(knowledgeId, contextDescription, similarityScore, localISO);
 
   // Update daily stats
   const today = new Date().toISOString().split("T")[0];

@@ -1,5 +1,6 @@
 const { desktopCapturer, screen, BrowserWindow } = require("electron");
 const { getSetting } = require("./database");
+const { execSync } = require("child_process");
 
 let lastScreenHash = "";
 let lastWindowTitle = "";
@@ -51,38 +52,76 @@ async function captureScreen() {
 }
 
 /**
- * Detect the active window by reading all window sources from desktopCapturer.
- * Returns the title of the focused (foreground) window.
+ * Get the foreground window title using native Windows API via PowerShell.
+ * This always returns the full title (e.g., "Page Title - Google Chrome")
+ * even in packaged Electron apps where desktopCapturer may truncate titles.
+ */
+function getActiveWindowTitleNative() {
+  try {
+    const ps = `Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class Win32 {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)]
+  public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+}
+"@
+$h = [Win32]::GetForegroundWindow()
+$sb = New-Object System.Text.StringBuilder 512
+[void][Win32]::GetWindowText($h, $sb, 512)
+$sb.ToString()`;
+
+    const result = execSync(`powershell -NoProfile -Command "${ps.replace(/"/g, '\\"').replace(/\n/g, " ")}"`, {
+      encoding: "utf-8",
+      timeout: 3000,
+      windowsHide: true,
+    });
+    return result.trim() || null;
+  } catch (err) {
+    console.error("[CaptureEngine] Native window title error:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Detect the active window. Uses native Windows API first (full page titles),
+ * falls back to desktopCapturer if native method fails.
  */
 async function detectActiveWindow() {
+  // Try native Windows API first — always gets the full title
+  const nativeTitle = getActiveWindowTitleNative();
+  if (nativeTitle) {
+    const lower = nativeTitle.toLowerCase();
+    // Skip our own windows
+    if (!lower.includes("productghost") && !lower.includes("devtools")) {
+      console.log("[CaptureEngine] Native window title:", nativeTitle);
+      return nativeTitle;
+    }
+  }
+
+  // Fallback: desktopCapturer
   try {
     const sources = await desktopCapturer.getSources({
       types: ["window"],
-      thumbnailSize: { width: 1, height: 1 }, // tiny — we only need the name
+      thumbnailSize: { width: 1, height: 1 },
     });
 
     if (!sources || sources.length === 0) return null;
 
-    // The focused window is typically the first one in the list,
-    // but we can also check which BrowserWindow is NOT ours.
-    const ourWindowIds = BrowserWindow.getAllWindows().map((w) => w.getMediaSourceId?.() || "");
-
-    // Filter out our own ProductGhost windows, pick the first external one
     const externalWindows = sources.filter((s) => {
       const name = s.name.toLowerCase();
-      // Skip our own windows
       if (name.includes("productghost")) return false;
       if (name.includes("devtools")) return false;
       if (name === "") return false;
       return true;
     });
 
-    // First external window is the most recently focused one
     if (externalWindows.length > 0) {
       return externalWindows[0].name;
     }
 
-    // Fallback to any window
     return sources[0]?.name || null;
   } catch (err) {
     console.error("[CaptureEngine] Error detecting active window:", err.message);

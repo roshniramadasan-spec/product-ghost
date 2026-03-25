@@ -49,9 +49,13 @@ function showNudgeOverlay(entry, screenContext, onLearnMore) {
     },
   });
 
-  const appMention = screenContext?.app
-    ? `Looks like you're in ${screenContext.app}. `
-    : "";
+  let appMention = "";
+  if (screenContext?.description && screenContext.description.includes("Page:")) {
+    // Show what they're actually looking at, not just "Chrome"
+    appMention = screenContext.description.split("Page:")[0].trim() + ". ";
+  } else if (screenContext?.app) {
+    appMention = `Looks like you're in ${screenContext.app}. `;
+  }
   const body = `${appMention}${entry.advice}`;
 
   const html = buildNudgeHTML(entry, body);
@@ -221,6 +225,18 @@ function buildNudgeHTML(entry, body) {
     cursor: pointer;
   }
   .learn-more:hover { background: #6d28d9; }
+  .listen-btn {
+    background: #18181b;
+    color: #a78bfa;
+    border: 1px solid #3f3f46;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-right: 6px;
+  }
+  .listen-btn:hover { background: #27272a; border-color: #7c3aed; }
   .progress {
     position: absolute;
     bottom: 0;
@@ -250,14 +266,16 @@ function buildNudgeHTML(entry, body) {
     <div class="body">${escapeHTML(body)}</div>
     <div class="footer">
       <div class="tags">${tagHTML}</div>
+      ${entry.podcast_url ? `<button class="listen-btn" onclick="openPodcast()">🎙️ Listen</button>` : ''}
       <button class="learn-more" onclick="learnMore()">Learn More</button>
     </div>
     <div class="progress"></div>
   </div>
   <script>
-    const { ipcRenderer } = require('electron');
+    const { ipcRenderer, shell } = require('electron');
     function dismiss() { ipcRenderer.send('nudge-overlay-dismiss'); }
     function learnMore() { ipcRenderer.send('nudge-overlay-learn-more'); }
+    function openPodcast() { shell.openExternal('${entry.podcast_url || ''}'); }
   </script>
 </body>
 </html>`;

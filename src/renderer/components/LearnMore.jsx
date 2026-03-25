@@ -97,9 +97,20 @@ export default function LearnMore({ entry, onClose }) {
 
         {/* Footer Actions */}
         <div className="flex items-center gap-2 px-6 py-4 border-t border-zinc-800/60 bg-zinc-900/50">
+          {entry.podcast_url && (
+            <a
+              href={entry.podcast_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-violet-600 text-white hover:bg-violet-500 transition-colors no-underline"
+            >
+              <span>🎙️</span>
+              Listen to Episode
+            </a>
+          )}
           <button
             onClick={handleSave}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-violet-600 text-white hover:bg-violet-500 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-200 hover:bg-zinc-700 border border-zinc-700/50 transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
