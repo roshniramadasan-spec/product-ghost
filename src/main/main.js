@@ -43,11 +43,8 @@ function createMainWindow() {
     },
   });
 
-  if (isDev) {
-    mainWindow.loadURL("http://localhost:5222");
-  } else {
-    mainWindow.loadFile(path.join(__dirname, "../../dist/index.html"));
-  }
+  // Always load from built dist files for reliability
+  mainWindow.loadFile(path.join(__dirname, "../../dist/index.html"));
 
   mainWindow.on("close", (e) => {
     if (!isQuitting) {
