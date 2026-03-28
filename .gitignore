@@ -3,5 +3,6 @@ dist/
 release/
 .env
 *.log
+*.db
 .DS_Store
 Thumbs.db
